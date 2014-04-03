@@ -1,0 +1,55 @@
+# Persphone experiment file
+
+# Database
+username=root
+password=persephone
+
+# Input files
+directory=replisome
+fasta=fasta/pol3.fasta
+input=data/pol3.mgf
+input_format=mgf
+
+# Info
+description=Replisome test data
+
+# Digestion settings
+enzyme=Trypsin
+enzyme_cut_residues=KR
+enzyme_no_cut_residues=P
+enzyme_cut_n_or_c_term=N
+enzyme_min_peptide_length=2;
+max_missed_cleavages=3
+decoy=0
+
+# Mass spectrometry settings
+accuracy_ms1=2
+accuracy_ms2=0.8
+threshold=2
+charge_match=0
+intensity_match=0
+calc_aions=1
+calc_bions=1
+calc_yions=1
+calc_waterloss=1
+calc_ammonialoss=1
+score_aions=0
+score_bions=1
+score_yions=1
+score_waterloss=0
+score_ammonialoss=0
+match_intensity=0
+
+
+# Modifications (format name:mass:amino_acid)
+modifications_fixed=Carbamidomethyl:57.02146:C
+modifications_dynamic=Oxidation:15.994915:M
+
+# Cross-linking reagents
+linker_mass=96.0211296
+monolink_mass=114.0316942
+reactive_amino_acid=K
+isotope=deuterium
+number_labelled_atoms=4
+
+

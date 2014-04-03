@@ -10,5 +10,5 @@ Scripts:
 
 
 Examples:
-* replisome.persephone - example experiment definiation file.
+* replisome.persephone - example experiment definition file.
 * replisome - example files for experiment.

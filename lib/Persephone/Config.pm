@@ -3,7 +3,7 @@ use strict;
 package Persephone::Config;
 
 use base 'Exporter';
-our @EXPORT = ('import_experiment_definition_file');
+our @EXPORT = ('import_experiment_definition_file', 'load_constants');
 
 
 sub import_experiment_definition_file {
@@ -30,3 +30,19 @@ close RC_FILE;
 
 return \%setting;
 }
+
+
+sub load_constants {
+
+my %constants;
+
+$constants{'mass_of_deuterium'} =2.01410178;
+$constants{'mass_of_hydrogen'}  =1.00783;
+$constants{'mass_of_proton'} = 1.00728;
+$constants{'mass_of_carbon13'}  =13.00335;
+$constants{'mass_of_carbon12'}  =12;
+
+return \%constants;
+}
+
+1;

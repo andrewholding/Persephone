@@ -13,21 +13,28 @@ input_format=mgf
 # Info
 description=Replisome test data
 
+# Search settings
+decoy=0
+charge_match=0
+intensity_match=0
+match_intensity=0
+match_intensity_ratio=0
+
 # Digestion settings
 enzyme=Trypsin
 enzyme_cut_residues=KR
 enzyme_no_cut_residues=P
-enzyme_cut_n_or_c_term=N
-enzyme_min_peptide_length=2;
+enzyme_cut_n_or_c_term=C
+enzyme_min_peptide_length=2
 max_missed_cleavages=3
-decoy=0
+
 
 # Mass spectrometry settings
 accuracy_ms1=2
 accuracy_ms2=0.8
+doublet_tollerance=50
+max_scan_seperation=60
 threshold=2
-charge_match=0
-intensity_match=0
 calc_aions=1
 calc_bions=1
 calc_yions=1
@@ -38,7 +45,8 @@ score_bions=1
 score_yions=1
 score_waterloss=0
 score_ammonialoss=0
-match_intensity=0
+
+
 
 
 # Modifications (format name:mass:amino_acid)

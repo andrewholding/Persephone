@@ -3,12 +3,130 @@ use strict;
 package Persephone::Data;
 
 use base 'Exporter';
+use lib 'lib';
+use Persephone::Config;
+
 our @EXPORT = (
   'import_fasta',                 'connect_db',
   'protein_residuemass',          'calculate_peptide_masses',
   'calculate_crosslink_peptides', 'generate_monolink_peptides',
-  'generate_modified_peptides'
+  'generate_modified_peptides', 'import_mgf',
+  'loaddoubletlist_db'
 );
+
+sub no_of_threads {
+  return 16;
+}
+
+
+sub loaddoubletlist_db    #Used to get mass-doublets from the data.
+{
+
+    my ($results_id, $settings_ref) = @_;
+
+    my %settings = %{$settings_ref};
+    
+    my $dbh = connect_db_results($results_id, 0, \%settings);
+    
+    print "Run $results_id: Finding doublets...  \n";
+ 
+    
+    my $doublet_ppm_err  = $settings{'doublet_tollerance'};
+    my $linkspacing = $settings{'number_labelled_atoms'};
+    my $isotope = $settings{'isotope'};
+    my $scan_width =  $settings{'max_scan_seperation'};
+    my $match_charge =  $settings{'charge_match'};
+    my $match_intensity =  $settings{'match_intensity'};
+    my $ms1_intensity_ratio = $settings{'match_intensity_ratio'};
+    
+    
+    my $constants_ref = load_constants;
+    my %constants = %{$constants_ref};
+    
+    my $mass_of_deuterium = $constants{'mass_of_deuterium'};
+    my $mass_of_hydrogen = $constants{'mass_of_hydrogen'};
+    my $mass_of_carbon13 = $constants{'mass_of_carbon13'};
+    my $mass_of_carbon12 = $constants{'mass_of_carbon12'};
+    
+
+    my $mass_seperation = 0;
+    if ($isotope eq "deuterium") {
+        $mass_seperation = $linkspacing * ($mass_of_deuterium - $mass_of_hydrogen);
+    } elsif ($isotope eq "carbon-13") {
+        $mass_seperation = $linkspacing * ($mass_of_carbon13 - $mass_of_carbon12);
+    }
+
+    my $average_peptide_mass  = 750;
+    my $mass_seperation_upper = $mass_seperation + $average_peptide_mass * (0 + ($doublet_ppm_err / 1000000));
+    my $mass_seperation_lower = $mass_seperation + $average_peptide_mass * (0 - ($doublet_ppm_err / 1000000));
+    my $isopairs;
+    my @peaklist;
+
+    my  $masslist;
+
+    $masslist = $dbh->do("alter table  msdata add index (monoisotopic_mw)");	  
+	
+
+    if ($isotope ne "none") {
+        my $charge_match_string = "";
+        if ($match_charge == "1") {
+            $charge_match_string = "and d1.charge = d2.charge ";
+        }
+        my $intensity_match_string = "";
+        if ($match_intensity == "1") {
+            $intensity_match_string = "and (d1.abundance > d2.abundance * ? and d1.abundance < d2.abundance * ?)  ";
+        }
+        $masslist = $dbh->prepare(
+            "create table doublets as select * from (SELECT d1.*,
+				  d2.scan_num as d2_scan_num,
+				  d2.mz as d2_mz,
+				  d2.MSn_string as d2_MSn_string,
+				  d2.charge as d2_charge,
+				  d2.monoisotopic_mw as d2_monoisotopic_mw,
+				  d2.title as d2_title,
+				  d2.abundance as d2_abundance,
+				  d2.precursor_scan as d2_precursor_scan
+			  FROM msdata d1 inner join msdata d2 on (d2.monoisotopic_mw between d1.monoisotopic_mw + ? and d1.monoisotopic_mw + ? )
+				  and d2.scan_num between d1.scan_num - ? 
+				  and d1.scan_num + ? " . $charge_match_string . $intensity_match_string . "and d1.fraction = d2.fraction 
+				  and d1.msorder = 2 and d2.msorder = 2
+			  ORDER BY d1.scan_num ASC) as doublets"
+        );
+        
+#          create table doublets as select sequence from (select * from peptides) as doubles limit 5;
+
+        
+
+#                warn "Exceuting Doublet Search\n";
+        if ($match_intensity == "1") {
+            if ($ms1_intensity_ratio == '0' or !defined $ms1_intensity_ratio) { $ms1_intensity_ratio = 1 }
+            
+                $masslist->execute($mass_seperation_lower, $mass_seperation_upper, $scan_width, $scan_width,
+                                   $ms1_intensity_ratio, 1 / $ms1_intensity_ratio);
+           
+        } else {
+             $masslist->execute($mass_seperation_lower, $mass_seperation_upper, $scan_width, $scan_width) ;
+        }
+
+        #       warn "Finished Doublet Search\n";
+    } else {
+        $masslist = $dbh->prepare(
+            "create table doublets SELECT *
+  			  FROM msdata 
+  			  ORDER BY scan_num ASC "
+        );
+         $masslist->execute() ;
+    }
+    my $settings_dbh = connect_db(\%settings);
+    my $doublets_found = $dbh->selectrow_array('select count(*) from doublets');
+    my $settings_sql = $settings_dbh->prepare("UPDATE settings SET doublets_found = ? WHERE  name = ?;");
+    $settings_sql->execute($doublets_found, $results_id);
+
+     print "Doublets found: $doublets_found\n";
+    
+    $dbh->disconnect;
+
+}
 
 sub modifications {
 
@@ -59,9 +177,9 @@ sub modifications {
 
 sub generate_modified_peptides {
 
-  print "Run $results_table: Calculating modified_peptides ... \n";
-
 my ($results_table,$settings_ref) = @_;
+
+  print "Run $results_table: Calculating modified peptides ... \n";
 
 my %settings = %{$settings_ref};
 my %modifications       = modifications($results_table, \%settings);
@@ -317,8 +435,89 @@ sub get_mods {
 
 }
 
-sub no_of_threads {
-  return 16;
+
+
+sub import_mgf    #Enters the uploaded MGF into a SQLite database
+{
+
+    my ($results_id, $settings_ref) = @_;
+
+    my %settings = %{$settings_ref};
+    my $filename = $settings{'directory'}."/".$settings{'input'};
+    my $fraction = 1;
+    my $dbh = connect_db_results($results_id, 0, \%settings);
+    my %line;
+    my $MSn_count = 0;
+    my $dataset   = 0;
+    my $MSn_string;
+
+    $line{'fraction'} = $fraction;
+      
+    open FILE, "<$filename", or die "Error: Cannot open MGF."; 
+  
+    print "Importing $filename ... \n";
+  
+    my $masslist = $dbh->prepare("DROP TABLE IF EXISTS msdata;");
+    $masslist->execute();
+        $dbh->do(
+	"CREATE TABLE msdata (
+		scan_num 	NUMERIC,
+		fraction 	NUMERIC, 
+		title	 	TEXT, 
+		charge 		NUMERIC,
+		mz		DOUBLE,
+		monoisotopic_mw DOUBLE,
+		abundance 	FLOAT,
+		MSn_string	TEXT,
+		msorder 	NUMERIC,
+		precursor_scan	NUMERIC) "
+        );
+    
+    while (<FILE>) {
+        if ($_ =~ "^BEGIN IONS") { $dataset = $dataset + 1; $line{'abundance'} = 0 }
+        elsif ($_ =~ "^PEPMASS") {
+             my $mystring = $_;	
+            if ($mystring =~ m/=(.*?) /)      { $line{'mz'}        = $1;}
+	    elsif ($mystring =~ m/=(.*?)[\r\n]/) { $line{'mz'}     = $1;}
+            if ($mystring =~ m/ (.*?)[\r\n]/) { $line{'abundance'} = $1 ;}
+        } elsif ($_ =~ "^SCANS") {
+            my $mystring = $_;
+            if ($mystring =~ m/=(.*?)[\r\n]/) { $line{'scan_num'} = $1 }
+        } elsif ($_ =~ "^CHARGE") {
+            my $mystring = $_;
+            if ($mystring =~ m/=(.*?)\+/) { $line{'charge'} = $1 }
+        } elsif ($_ =~ "^TITLE") {
+            my $mystring = $_;
+            if ($mystring =~ m/=(.*?)[\r\n]/) { $line{'title'} = $1 }
+        }
+
+        elsif ($_ =~ "^.[0-9]") {
+            my $MSn_row = $_;
+            $MSn_count  = $MSn_count + 1;
+            $MSn_string = $MSn_string . $MSn_row;
+            my @MSn_split = split(/ /, $MSn_row);
+            my ($ms2_mz, $ms2_abundance) = @MSn_split;
+
+            #       $scan_data->execute($line{'scan_num'},$ms2_mz, $ms2_abundance);
+        }
+
+        elsif ($_ =~ "^END IONS") {
+            $line{'monoisoptic_mw'} = $line{'mz'} * $line{'charge'} - ($line{'charge'} * 1.00728);
+            my $newline = $dbh->prepare(
+"INSERT INTO msdata (scan_num, fraction, title, charge, mz, abundance, monoisotopic_mw, MSn_string, msorder) VALUES (? , ?, ?, ?, ?, ?, ?,?, 2)"
+            );
+                $newline->execute($line{'scan_num'}, $line{'fraction'}, $line{'title'}, $line{'charge'}, $line{'mz'},
+                                  $line{'abundance'}, $line{'monoisoptic_mw'}, $MSn_string);
+
+            # 	 warn "Scan imported \n";
+
+            $line{'scan_num'} = $line{'monoisoptic_mw'} = $line{'abundance'} = $MSn_string = '';
+            $MSn_count = 0;
+        }
+    }
+
+    $dbh->commit;
+    $dbh->disconnect;
 }
 
 sub create_settings {
@@ -900,3 +1099,5 @@ sub import_fasta {
   return $results_table;
 
 }
+
+1;

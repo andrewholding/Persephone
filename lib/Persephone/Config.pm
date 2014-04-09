@@ -33,6 +33,55 @@ while (my $line = <RC_FILE>) {
 }
 close RC_FILE;
 
+
+   my %ms2_fragmentation;
+
+  my $scored_ions = '';
+  if ( defined $setting{'score_aions'} ) {
+    $scored_ions = $scored_ions . 'A-ions, ';
+    $ms2_fragmentation{'aions-score'} = '1';
+  } else {
+        $ms2_fragmentation{'aions-score'} = '0';
+  }
+  if ( defined $setting{'score_bions'} ) {
+    $ms2_fragmentation{'bions-score'} = '1';
+    $scored_ions = $scored_ions . 'B-ions, ';
+  } else {
+        $ms2_fragmentation{'bions-score'} = '0';
+  }
+  if ( defined $setting{'score_yions'} ) {
+    $ms2_fragmentation{'yions-score'} = '1';
+    $scored_ions = $scored_ions . 'Y-ions, ';
+  } else {
+        $ms2_fragmentation{'yions-score'} = '0';
+  }
+  if ( defined $setting{'score_waterions'} ) {
+    $ms2_fragmentation{'waterloss-score'} = '1';
+    $scored_ions = $scored_ions . 'Water-loss ions, ';
+  } else {
+        $ms2_fragmentation{'waterloss-score'} = '0';
+  }
+  if ( defined $setting{'score_ammoniaions'} ) {
+    $ms2_fragmentation{'ammonialoss-score'} = '1';
+    $scored_ions = $scored_ions . 'ammonia-loss ions, ';
+  }else {
+        $ms2_fragmentation{'ammonialoss-score'} = '0';
+    }
+  
+    if   (defined $setting{'calc_aions'}) { $ms2_fragmentation{'aions'} = '1' }
+    else                                  { $ms2_fragmentation{'aions'} = '0' }
+    if   (defined $setting{'calc_bions'}) { $ms2_fragmentation{'bions'} = '1' }
+    else                                  { $ms2_fragmentation{'bions'} = '0' }
+    if   (defined $setting{'calc_yions'}) { $ms2_fragmentation{'yions'} = '1' }
+    else                                  { $ms2_fragmentation{'yions'} = '0' }
+    if   (defined $setting{'calc_waterloss'}) { $ms2_fragmentation{'waterloss'} = '1'; }
+    else                                      { $ms2_fragmentation{'waterloss'} = '0'; }
+    if   (defined $setting{'calc_ammonialoss'}) { $ms2_fragmentation{'ammonialoss'} = '1'; }
+    else                                        { $ms2_fragmentation{'ammonialoss'} = '0'; }
+
+   $setting{'scored_ions'} = $scored_ions;
+   $setting{'ms2_fragmentation'} = \%ms2_fragmentation;
+
 return \%setting;
 }
 

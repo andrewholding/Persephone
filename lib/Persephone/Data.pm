@@ -9,11 +9,49 @@ use Persephone::Config;
 our @EXPORT = (
   'save_settings',                'connect_db',
   'connect_db_results',		   'create_peptide_table', 
+  'create_protein_database',
   
   'loaddoubletlist_db',	
   
   'add_peptide', 		  'get_mods',
+  'add_proteins',
 );
+
+
+sub add_proteins
+{
+
+  my(  $dbh,           $name,       $sequence, $run_id  ) = @_;
+
+  my $newline = $dbh->prepare(
+"INSERT INTO proteins (protein_id, name, sequence, run_id) VALUES (null,?,?,?)"
+  );
+
+  $newline->execute($name,$sequence,$run_id );
+}
+
+
+sub create_protein_database
+{
+   my ($results_id, $settings_ref) = @_;
+
+    my %settings = %{$settings_ref};  
+   
+   my $results_dbh = connect_db_results($results_id, 1, \%settings);
+
+   
+  $results_dbh->do(
+    "CREATE TABLE IF NOT EXISTS proteins (
+						      protein_id INTEGER NOT NULL AUTO_INCREMENT, PRIMARY KEY (protein_id) ,
+						      name TEXT,
+						      sequence TEXT,
+						      run_id INTEGER
+						) "
+  );
+   
+   
+}
+
 
 
 sub loaddoubletlist_db    #Used to get mass-doublets from the data.
@@ -25,7 +63,7 @@ sub loaddoubletlist_db    #Used to get mass-doublets from the data.
     
     my $dbh = connect_db_results($results_id, 0, \%settings);
     
-    print "Run $results_id: Finding doublets...  \n";
+    print "Finding doublets...  \n";
  
     
     my $doublet_ppm_err  = $settings{'doublet_tollerance'};
@@ -177,22 +215,10 @@ sub save_settings {
 #     if   (defined $match_intensity && $match_intensity == '1') { $match_intensity = 'Yes' }
 #     else                           { $match_intensity = 'No' }
 
-  my $scored_ions = '';
-  if ( defined $settings{'score_aions'} ) {
-    $scored_ions = $scored_ions . 'A-ions, ';
-  }
-  if ( defined $settings{'score_bions'} ) {
-    $scored_ions = $scored_ions . 'B-ions, ';
-  }
-  if ( defined $settings{'score_yions'} ) {
-    $scored_ions = $scored_ions . 'Y-ions, ';
-  }
-  if ( defined $settings{'score_waterions'} ) {
-    $scored_ions = $scored_ions . 'Water-loss ions, ';
-  }
-  if ( defined $settings{'score_ammoniaions'} ) {
-    $scored_ions = $scored_ions . 'ammonia-loss ions, ';
-  }
+
+
+   
+ 
 
   create_settings($settings_dbh);
 
@@ -238,7 +264,7 @@ sub save_settings {
     $settings{'threshold'},
     $settings{'charge_match'},
     $settings{'intensity_match'},
-    $scored_ions,
+    $settings{'scored_ions'},
     $settings{'amber_codon'},
     time,
     $settings{'non_specific_digest'},
